@@ -1,9 +1,6 @@
 #Python
-from importlib.resources import path
-from operator import gt
-from turtle import title
 from typing import Optional
-from unittest.mock import patch
+
 
 #Pydantic
 from pydantic import BaseModel
@@ -15,6 +12,11 @@ from fastapi import Body , Query, Path
 app = FastAPI()
 
 #Models
+
+class Location(BaseModel):
+    city: str
+    state : str
+    country : str
 
 class Person(BaseModel):
     first_name : str
@@ -76,3 +78,24 @@ def show_person(
     
 ):
     return {person_id: "It exists"}
+
+
+
+#validations request body
+
+@app.put("/person/{person_id}")
+def update_person(
+    
+    person_id: int = Path(
+        ...,
+        gt=0,
+        title="Person ID",
+        description="This is the person ID It's required"
+    ),
+    
+    person: Person = Body(...),
+    location :Location = Body(...)    
+):
+    results = person.dict()
+    results.update(location.dict())    
+    return results
