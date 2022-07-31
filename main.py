@@ -1,82 +1,38 @@
-#Python
-from doctest import Example
-from typing import Optional
-from enum import Enum
 
-#Pydantic
-from pydantic import BaseModel
-from pydantic import Field
+
+#Database
+import email
+from database import connection
+from database import User
+
+
+#Validations
+
+from schemas import *
+
 
 #FastAPI
 from fastapi import FastAPI
-from fastapi import Body , Query, Path
+from fastapi import Body , Query, Path, HTTPException
+
+from schemas import UserRequestModel
 
 app = FastAPI()
 
-#Models
-
-class HairColor(Enum):
-    white ="white"
-    brown ="bronw"
-    black = "black"
-    blonde = "blonde"
-    red = "red"
-
-class Location(BaseModel):
-    city: str = Field(
-        ...,
-        min_length=1,
-        max_length=60,
-        example ="El Tigre"
-        )
-    state : str = Field(
-           ...,
-        min_length=1,
-        max_length=60,
-        example ="Anzoategui"
-        )
-    country : str = Field(
-           ...,
-        min_length=1,
-        max_length=60,
-        example ="Venezuela"
-        )
-
-class Person(BaseModel):
-    first_name : str = Field (
-        ...,
-        min_length=1,
-        max_length=50,
-        example ="Erik" 
-        )
-    last_namet :str =Field(
-        ...,
-        min_length=1,
-        max_length=50,
-        example = "Rojas"
-        )
-    age :int = Field(
-        ...,
-        gt=0,
-        le=115,
-        example = 36
+# Event Conection BD and close BD
+@app.on_event('startup')
+def startup ():
+    if connection.is_closed():
+        connection.connect()
         
-        )
-    is_married : Optional[bool] = Field(default=None, example = False)
-    hair_color : Optional[HairColor]= Field (default=None, example = "black")
-    
-    
-    
-    # class Config: # esta subclase nos permite tener un valores por default en el body
-    #     schema_extra = {
-    #         "example": {
-    #             "first_name": "Facundo",
-    #             "last_name": "García Martoni",
-    #             "age": 21, 
-    #             "hair_color": "blonde",
-    #             "is_married": False
-    #         }
-    #     }
+    connection.create_tables([User])
+
+@app.on_event('shutdown')
+def shutdown():
+    if not connection.is_closed():
+        connection.close()
+
+
 
 
 @app.get("/")
@@ -86,7 +42,64 @@ def home():
 
 #request and response  Body
 
+#Create user
 
+@app.post("/users")
+async def create_user(user_request: UserRequestModel):
+    user = User.create(
+        username = user_request.username,
+        email = user_request.email    
+    )
+    
+    return user_request
+    
+
+
+# Consult User
+@app.get("/users/{user_id}")
+async def get_user (user_id):
+    
+    user =User.select().where(User.id == user_id).first()    
+    
+    if user:        
+        return UserResponseModel (id=user.id, username=user.username, email=user.email)# Serializando
+    else:
+        return HTTPException (404, "User Not Found")
+
+
+#Delete User
+
+@app.delete("/users/{user_id}")
+async def delete_user (user_id):
+    
+    user =User.select().where(User.id == user_id).first()    
+    
+    if user:    
+        user.delete_instance()    
+        return "True"
+    else:
+        return HTTPException (404, "User Not Found")
+
+
+
+#Update User
+
+@app.put("/users/{user_id}")
+async def update_user (user_id, user_update: UserUpdate ):
+    
+    #user =User.select().where(User.id == user_id).first()    
+    
+    connection.execute(User.update(
+        
+        username = user_update.username,
+        email = user_update.email,  
+    ).where(User.id == user_id))         
+                       
+    return connection.execute(User.select()).fetchall()
+
+       
+    
+  
 @app.post("/person/new")
 def create_person(person : Person = Body(...)):
     
